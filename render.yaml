@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: iqos-assistant-api
+    runtime: docker
+    rootDir: iqos-assistant-2.1.1/backend
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /health
+    disk:
+      name: iqos-assistant-data
+      mountPath: /app/data
+      sizeGB: 1
+    envVars:
+      - key: IQOS_DATA_DIR
+        value: /app/data
