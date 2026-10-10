@@ -1,33 +1,20 @@
 # IQOS Assistant 2.1.1
 
-IQOS Assistant is a backend service designed to help users search, organize, and summarize files, as well as manage reminders and scheduled tasks.
+Package includes a portable plugin manifest, reusable workflow skill, OpenAPI 3.1 specification, and a FastAPI starter backend.
 
-## Features
+## Included
+- File search over text-readable files in a configured local folder
+- Extractive starter summaries
+- Safe preview-first rename/move operations
+- Persistent reminder records
+- OpenAPI schema and Dockerfile
 
-- **File Search:** Search for information in available files.
-- **Summarization:** Summarize documents and extract important information.
-- **File Organization:** Support workflows for organizing files.
-- **Reminders:** Provide a foundation for managing reminders and scheduled tasks.
-- **REST API:** Provide endpoints for supported assistant workflows.
-- **Extensible Backend:** Designed to support additional integrations and features.
+## Not yet connected
+This is a scaffold, not a fully deployed cloud service. Google Drive/OneDrive OAuth, ChatGPT uploaded-file ingestion, push notifications/scheduler, and semantic AI summarization need provider credentials and deployment. No credentials are embedded.
 
-## Technology
-
-- Python
-- FastAPI
-- REST API
-- Docker
-
-## Project Status
-
-This project is under development. Cloud storage integrations, authentication, and reminder notifications may require additional configuration and implementation.
-
-**Security:** Do not expose the API publicly until authentication and appropriate security controls have been implemented.
-
-## Getting Started
-
-See the `backend/README.md` file for backend setup instructions.
-
-## License
-
-License not yet specified.
+## Next steps
+1. Deploy `backend/` to a secure HTTPS host.
+2. Configure authentication and persistent storage.
+3. Add authorized cloud provider connectors and a scheduler.
+4. Replace the placeholder server URL in `openapi.yaml`.
+5. Connect the hosted API/MCP server in ChatGPT and test with sample data.

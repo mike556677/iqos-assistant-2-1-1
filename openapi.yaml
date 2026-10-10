@@ -1,0 +1,193 @@
+openapi: 3.1.0
+info:
+  title: IQOS Assistant API
+  version: 2.1.1
+  description: API for searching files, summarizing text, organizing files, and managing reminders. Replace the server URL with the deployed HTTPS endpoint before connecting.
+servers:
+  - url: https://REPLACE-WITH-YOUR-DEPLOYED-HOST.example.com
+    description: Placeholder; replace before deployment
+paths:
+  /health:
+    get:
+      operationId: healthCheck
+      summary: Check API health
+      responses:
+        '200':
+          description: API is running
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, const: ok }
+                  version: { type: string }
+  /files/search:
+    post:
+      operationId: searchFiles
+      summary: Search indexed uploaded or connected files
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchRequest'
+      responses:
+        '200':
+          description: Matching files
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items: { $ref: '#/components/schemas/FileRecord' }
+  /files/summarize:
+    post:
+      operationId: summarizeText
+      summary: Create a concise summary of supplied text
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              properties:
+                text: { type: string, minLength: 1 }
+                style: { type: string, enum: [brief, detailed, bullets], default: brief }
+      responses:
+        '200':
+          description: Summary result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  summary: { type: string }
+                  word_count: { type: integer }
+  /files:
+    get:
+      operationId: listFiles
+      summary: List files in the configured local index
+      responses:
+        '200':
+          description: Indexed files
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  files:
+                    type: array
+                    items: { $ref: '#/components/schemas/FileRecord' }
+  /files/organize:
+    post:
+      operationId: organizeFiles
+      summary: Preview or apply a file rename or move
+      description: Set apply=true only after the user has confirmed the proposed operation. Local file backend only; cloud providers require integration.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [file_id, action]
+              properties:
+                file_id: { type: string }
+                action: { type: string, enum: [rename, move] }
+                new_name: { type: string }
+                destination_folder: { type: string }
+                apply: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Preview or operation result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  applied: { type: boolean }
+                  message: { type: string }
+                  file: { $ref: '#/components/schemas/FileRecord' }
+  /reminders:
+    get:
+      operationId: listReminders
+      summary: List reminders
+      responses:
+        '200':
+          description: Reminder list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reminders:
+                    type: array
+                    items: { $ref: '#/components/schemas/Reminder' }
+    post:
+      operationId: createReminder
+      summary: Create a reminder
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, due_at]
+              properties:
+                title: { type: string, minLength: 1 }
+                due_at: { type: string, format: date-time, description: ISO 8601 date-time including timezone offset }
+                timezone: { type: string, default: Europe/Nicosia }
+                recurrence: { type: string, enum: [none, daily, weekly, monthly], default: none }
+      responses:
+        '201':
+          description: Reminder created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Reminder' }
+  /reminders/{reminder_id}:
+    delete:
+      operationId: deleteReminder
+      summary: Delete a reminder
+      parameters:
+        - name: reminder_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Reminder deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted: { type: boolean }
+components:
+  schemas:
+    SearchRequest:
+      type: object
+      required: [query]
+      properties:
+        query: { type: string, minLength: 1 }
+        source: { type: string, enum: [all, local, uploaded, cloud], default: all }
+        limit: { type: integer, minimum: 1, maximum: 100, default: 20 }
+    FileRecord:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        path: { type: string }
+        source: { type: string }
+        snippet: { type: string }
+        modified_at: { type: string, format: date-time }
+    Reminder:
+      type: object
+      properties:
+        id: { type: string }
+        title: { type: string }
+        due_at: { type: string, format: date-time }
+        timezone: { type: string }
+        recurrence: { type: string }
+        created_at: { type: string, format: date-time }

@@ -1,0 +1,20 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "iqos-assistant-2-1-1",
+  "version": "2.1.1",
+  "description": "Search, organize, and summarize uploaded or connected cloud files, and manage reminders and scheduled tasks.",
+  "author": { "name": "IQOS Assistant" },
+  "license": "MIT",
+  "keywords": ["files", "search", "summaries", "reminders", "automation", "productivity"],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "IQOS Assistant 2.1.1",
+        "shortDescription": "Search files, summarize documents, and manage reminders",
+        "longDescription": "A productivity assistant for searching and summarizing uploaded or connected cloud files, organizing files, and managing reminders. Cloud providers require user-authorized connections; reminders require a configured scheduler.",
+        "category": "Productivity",
+        "capabilities": ["Search", "Summarize", "Organize", "Reminders"]
+      }
+    }
+  }
+}
