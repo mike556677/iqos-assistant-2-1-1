@@ -4,7 +4,7 @@ info:
   version: 2.1.1
   description: API for searching files, summarizing text, organizing files, and managing reminders. Replace the server URL with the deployed HTTPS endpoint before connecting.
 servers:
-  - url: https://REPLACE-WITH-YOUR-DEPLOYED-HOST.example.com
+  - url: https://iqos-assistant-2-1-1.onrender.com/
     description: Placeholder; replace before deployment
 paths:
   /health:
