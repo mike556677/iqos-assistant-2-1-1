@@ -8,7 +8,8 @@ import os, json, uuid, shutil
 from pathlib import Path
 from datetime import datetime, timezone
 from typing import Literal
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header, Depends
+import secrets
 from pydantic import BaseModel, Field
 
 ROOT = Path(os.getenv("IQOS_DATA_DIR", "./data")).resolve()
@@ -17,6 +18,20 @@ REMINDERS_FILE = ROOT / "reminders.json"
 FILES_DIR.mkdir(parents=True, exist_ok=True)
 ROOT.mkdir(parents=True, exist_ok=True)
 app = FastAPI(title="IQOS Assistant API", version="2.1.1")
+def verify_api_key(x_iqos_api_key: str = Header(default="")):
+    expected_key = os.getenv("IQOS_API_KEY")
+
+    if not expected_key:
+        raise HTTPException(
+            status_code=503,
+            detail="API key is not configured"
+        )
+
+    if not secrets.compare_digest(x_iqos_api_key, expected_key):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or missing API key"
+        )
 
 class SearchRequest(BaseModel):
     query: str = Field(min_length=1)
@@ -52,11 +67,12 @@ def file_record(p: Path, snippet=""):
 @app.get("/health")
 def health(): return {"status": "ok", "version": "2.1.1"}
 
-@app.get("/files")
+
+@app.get("/files", dependencies=[Depends(verify_api_key)])
 def list_files():
     return {"files": [file_record(p) for p in FILES_DIR.rglob("*") if p.is_file()]}
 
-@app.post("/files/search")
+@app.post("/files/search", dependencies=[Depends(verify_api_key)])
 def search_files(req: SearchRequest):
     if req.source == "cloud": return {"results": [], "notice": "No cloud provider is configured. Add an OAuth-authorized provider connector first."}
     terms = req.query.casefold().split()
@@ -75,7 +91,7 @@ def search_files(req: SearchRequest):
             if len(results) >= req.limit: break
     return {"results": results, "notice": "Search is limited to text-readable files in the configured local data directory; uploaded/cloud sources need provider integration."}
 
-@app.post("/files/summarize")
+@app.post("/files/summarize", dependencies=[Depends(verify_api_key)])
 def summarize(payload: dict):
     text = str(payload.get("text", "")).strip()
     if not text: raise HTTPException(400, "text is required")
@@ -87,7 +103,7 @@ def summarize(payload: dict):
     if style == "bullets": summary = "\n".join("- " + s.strip() for s in sentences[:count])
     return {"summary": summary, "word_count": len(text.split()), "note": "Extractive starter summary; connect an LLM summarization service for semantic summaries."}
 
-@app.post("/files/organize")
+@app.post("/files/organize", dependencies=[Depends(verify_api_key)])
 def organize(payload: dict):
     file_id = str(payload.get("file_id", ""))
     action = payload.get("action")
@@ -109,10 +125,10 @@ def organize(payload: dict):
     shutil.move(str(candidate), str(dest))
     return {"applied": True, "message": "File operation completed", "file": file_record(dest)}
 
-@app.get("/reminders")
+@app.get("/reminders", dependencies=[Depends(verify_api_key)])
 def list_reminders(): return {"reminders": read_reminders()}
 
-@app.post("/reminders", status_code=201)
+@app.post("/reminders", status_code=201, dependencies=[Depends(verify_api_key)])
 def create_reminder(req: ReminderRequest):
     try:
         parsed = datetime.fromisoformat(req.due_at.replace("Z", "+00:00"))
@@ -123,7 +139,7 @@ def create_reminder(req: ReminderRequest):
     items.append(item); write_reminders(items)
     return {**item, "notice": "Saved to the reminder store. Notifications will not fire until a scheduler/notification provider is configured."}
 
-@app.delete("/reminders/{reminder_id}")
+@app.delete("/reminders/{reminder_id}", dependencies=[Depends(verify_api_key)])
 def delete_reminder(reminder_id: str):
     items = read_reminders(); updated = [x for x in items if x.get("id") != reminder_id]
     if len(updated) == len(items): raise HTTPException(404, "Reminder not found")
