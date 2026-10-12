@@ -46,6 +46,25 @@ class FileRecord(BaseModel):
     snippet: str = ""
     modified_at: str
 
+class ICloudDocument(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    path: str = Field(min_length=1, max_length=1000)
+    name: str = Field(min_length=1, max_length=255)
+    extension: str = Field(min_length=1, max_length=10)
+    size_bytes: int = Field(ge=0, le=10 * 1024 * 1024)
+    modified_at: str = Field(min_length=1, max_length=64)
+    text: str = Field(min_length=1, max_length=100_000)
+
+
+class ICloudIndexRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    documents: list[ICloudDocument] = Field(
+        min_length=1,
+        max_length=10,
+    )
+
 class ReminderRequest(BaseModel):
     title: str = Field(min_length=1)
     due_at: str
@@ -64,6 +83,57 @@ def file_record(p: Path, snippet=""):
     rel = p.relative_to(FILES_DIR).as_posix()
     return {"id": rel, "name": p.name, "path": rel, "source": "local", "snippet": snippet[:400], "modified_at": datetime.fromtimestamp(p.stat().st_mtime, timezone.utc).isoformat()}
 
+ICLOUD_DIR = (ROOT / "icloud_index").resolve()
+ICLOUD_DIR.mkdir(parents=True, exist_ok=True)
+
+
+@app.post("/icloud/index", status_code=201, dependencies=[Depends(verify_api_key)])
+def index_icloud_documents(req: ICloudIndexRequest):
+    indexed = []
+
+    for doc in req.documents:
+        # Never use a client-supplied path as a filesystem destination.
+        safe_id = str(uuid.uuid4())
+        record = {
+            "id": safe_id,
+            "name": doc.name,
+            "path": doc.path,
+            "source": "icloud",
+            "extension": doc.extension.lower(),
+            "size_bytes": doc.size_bytes,
+            "modified_at": doc.modified_at,
+            "text": doc.text,
+            "indexed_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+        destination = ICLOUD_DIR / f"{safe_id}.json"
+        temporary = ICLOUD_DIR / f".{safe_id}.tmp"
+
+        try:
+            temporary.write_text(
+                json.dumps(record, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            temporary.replace(destination)
+        except OSError as exc:
+            temporary.unlink(missing_ok=True)
+            raise HTTPException(
+                status_code=500,
+                detail="Could not save indexed document",
+            ) from exc
+
+        indexed.append({
+            "id": safe_id,
+            "name": doc.name,
+            "path": doc.path,
+            "source": "icloud",
+        })
+
+    return {
+        "indexed_count": len(indexed),
+        "documents": indexed,
+    }
+
 @app.get("/health")
 def health(): return {"status": "ok", "version": "2.1.1"}
 
@@ -74,22 +144,65 @@ def list_files():
 
 @app.post("/files/search", dependencies=[Depends(verify_api_key)])
 def search_files(req: SearchRequest):
-    if req.source == "cloud": return {"results": [], "notice": "No cloud provider is configured. Add an OAuth-authorized provider connector first."}
+    if req.source == "cloud":
+        return {
+            "results": [],
+            "notice": "No live cloud provider is configured. Locally indexed iCloud documents are searched as uploaded files."
+        }
+
     terms = req.query.casefold().split()
     results = []
-    for p in FILES_DIR.rglob("*"):
-        if not p.is_file(): continue
-        try:
-            if p.stat().st_size > 5_000_000: continue
-            raw = p.read_text(encoding="utf-8", errors="ignore")
-        except OSError: continue
-        haystack = (p.name + " " + raw).casefold()
-        if all(t in haystack for t in terms):
-            pos = haystack.find(terms[0]) if terms else 0
-            snippet = raw[max(0, pos-100):pos+300] if raw else ""
-            results.append(file_record(p, snippet))
-            if len(results) >= req.limit: break
-    return {"results": results, "notice": "Search is limited to text-readable files in the configured local data directory; uploaded/cloud sources need provider integration."}
+
+    # Search ordinary local files.
+    if req.source in ("all", "local"):
+        for p in FILES_DIR.rglob("*"):
+            if not p.is_file():
+                continue
+            try:
+                if p.stat().st_size > 5_000_000:
+                    continue
+                raw = p.read_text(encoding="utf-8", errors="ignore")
+            except OSError:
+                continue
+
+            haystack = (p.name + " " + raw).casefold()
+            if all(term in haystack for term in terms):
+                pos = raw.casefold().find(terms[0]) if terms else 0
+                snippet = raw[max(0, pos - 100):pos + 300]
+                results.append(file_record(p, snippet))
+                if len(results) >= req.limit:
+                    return {"results": results}
+
+    # Search documents indexed through /icloud/index.
+    if req.source in ("all", "uploaded"):
+        for p in ICLOUD_DIR.glob("*.json"):
+            try:
+                record = json.loads(p.read_text(encoding="utf-8"))
+                name = str(record.get("name", ""))
+                path = str(record.get("path", ""))
+                raw = str(record.get("text", ""))
+                haystack = (name + " " + path + " " + raw).casefold()
+            except (OSError, ValueError, TypeError):
+                continue
+
+            if all(term in haystack for term in terms):
+                pos = raw.casefold().find(terms[0]) if terms else 0
+                snippet = raw[max(0, pos - 100):pos + 300]
+                results.append({
+                    "id": str(record.get("id", p.stem)),
+                    "name": name,
+                    "path": path,
+                    "source": "uploaded",
+                    "snippet": snippet[:400],
+                    "modified_at": str(record.get("modified_at", "")),
+                })
+                if len(results) >= req.limit:
+                    break
+
+    return {
+        "results": results,
+        "notice": "Search covers local files and locally indexed document text. Live cloud-provider search is not configured."
+    }
 
 @app.post("/files/summarize", dependencies=[Depends(verify_api_key)])
 def summarize(payload: dict):

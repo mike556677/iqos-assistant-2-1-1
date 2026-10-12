@@ -1,0 +1,8 @@
+﻿__pycache__/
+*.py[cod]
+.env
+backend/main-backup-before-icloud.py
+local-api-test-data/
+scanner-test/
+
+openapi-backup-before-icloud.yaml
